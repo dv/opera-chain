@@ -44,24 +44,38 @@ end
 class OperaDirectory
   attr_reader :title, :parent, :children
 
-  def initialize(node, parent = nil)
+  def initialize(agent, node, parent = nil)
+    @agent = agent
     @parent = parent
     @link = node.search("./a").first
     @title = @link.content.strip
     @children = []
+    @bookmarks = []
+    @loaded = false
 
     # Generate subdirectories
     node.search('./ul/li').each do |sub_node|
-      @children << OperaDirectory.new(sub_node, self)
+      @children << OperaDirectory.new(@agent, sub_node, self)
     end
+  end
+
+  def bookmarks
+    load unless @loaded
+
+    @bookmarks
   end
 
 
   private
 
-  # Loads the bookmarks and directories in this directory
-  def load(recursive = false)
-    page = agent.click link
+  # Loads the bookmarks in this directory
+  def load
+    @loaded = true
+    page = @agent.click @link
+
+    page.search('//li[@class="xfolkentry"]').each do |node|
+      @bookmarks << OperaBookmark.new(@agent, node, self)
+    end
   end
 
 end
@@ -76,7 +90,7 @@ class OperaBookmark
   # </li>
   #
   #
-  def initialize(node, parent, agent)
+  def initialize(agent, node, parent)
     @title = node.search("span").first.content
     @url = node.search("a[@class='taggedlink']").first["href"]
     @edit_link = node.search("a[@class='ed']").first
@@ -89,7 +103,7 @@ class OperaBookmark
   def title=(title)
      form = edit_form
      form.name = title    # Or "edit-name"?     
-     agent.submit form    # Todo: check exceptions
+     @agent.submit form    # Todo: check exceptions
      @title = title
 
      self
@@ -98,22 +112,22 @@ class OperaBookmark
   def url=(url)
     form = edit_form
     form.link = url       # Or edit-link? 
-    agent.submit form
+    @agent.submit form
     @url = url
 
     self
   end
 
   def delete
-    agent.click delete_link
-
+    @agent.click @delete_link
+    @parent.children.delete(self)
     self
   end
 
   private
   
   def edit_form
-    edit_page = agent.click edit_link
+    edit_page = @agent.click @edit_link
     edit_page.forms.first
   end
 end
@@ -153,12 +167,15 @@ page = a.click page.link_with(:text => 'Bookmarks')
 #end
 
 
-root_node = OperaDirectory.new(page.search('//ul[@id="folders"]/li').first)      # Root node, "Bookmarks"
+root_node = OperaDirectory.new(a, page.search('//ul[@id="folders"]/li').first)      # Root node, "Bookmarks"
 
 
 # Browse through bookmark directories
 def print_node(node, level = 0)
   puts "#{'  ' * level}#{node.title}" 
+  node.bookmarks.each do |bookmark|
+    puts "#{'  ' * (level+1)}#{bookmark.title}"
+  end
   node.children.each do |subnode|
     print_node(subnode, level+1)
   end
