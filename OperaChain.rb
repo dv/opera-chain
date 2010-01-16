@@ -127,7 +127,7 @@ class OperaDirectory
     end
   end
 
-  def add_bookmark(title, link, description = "")
+  def add(title, link, description = "")
     cache unless @cached
 
     page = @agent.click @add_link
@@ -222,7 +222,7 @@ end
 
 
 # Add bookmark
-#root_node.children[2].add_bookmark("Crowdway", "http://crowdway.com/", "Best site in the universe!")
+#root_node.children[2].add("Crowdway", "http://crowdway.com/", "Best site in the universe!")
 
 #all_bookmarks(root_node) do |bookmark|
 #  puts bookmark.title
