@@ -37,7 +37,9 @@ require 'rubygems'
 require 'mechanize'
 
 a = WWW::Mechanize.new do |agent|
-#  agent.user_agent_alias = 'Opera Chain v0.0'
+  agent.redirect_ok = true
+  agent.follow_meta_refresh = true
+  agent.user_agent = "Opera Chain v0.0"
 end
 
 # BookmarkTag == Directory
@@ -48,10 +50,11 @@ class OperaDirectory
     @agent = agent
     @parent = parent
     @link = node.search("./a").first
+    @add_link = nil 
     @title = @link.content.strip
     @children = []
     @bookmarks = []
-    @loaded = false
+    @cached = false
 
     # Generate subdirectories
     node.search('./ul/li').each do |sub_node|
@@ -60,19 +63,33 @@ class OperaDirectory
   end
 
   def bookmarks
-    load unless @loaded
+    cache unless @cached
 
     @bookmarks
+  end
+
+  def add_bookmark(title, link, description = "")
+    cache unless @cached
+
+    page = @agent.click @add_link
+    form = page.forms.first
+    form["name"] = title      # Manual selector because name() is a function
+    form.link = link
+    form.desc = description
+    page = form.click_button
+    cache(page)
   end
 
 
   private
 
   # Loads the bookmarks in this directory
-  def load
-    @loaded = true
-    page = @agent.click @link
+  def cache(page = nil)
+    @cached = true
+    @bookmarks.clear 
+    page ||= @agent.click @link
 
+    @add_link = page.link_with(:text => "Add a bookmark in this folder")
     page.search('//li[@class="xfolkentry"]').each do |node|
       @bookmarks << OperaBookmark.new(@agent, node, self)
     end
@@ -102,8 +119,8 @@ class OperaBookmark
 
   def title=(title)
      form = edit_form
-     form.name = title    # Or "edit-name"?     
-     @agent.submit form    # Todo: check exceptions
+     form["name"] = title
+     form.click_button    # Todo: check exceptions
      @title = title
 
      self
@@ -111,8 +128,8 @@ class OperaBookmark
   
   def url=(url)
     form = edit_form
-    form.link = url       # Or edit-link? 
-    @agent.submit form
+    form.link = url
+    form.click_button
     @url = url
 
     self
@@ -181,7 +198,33 @@ def print_node(node, level = 0)
   end
 end
 
+def all_bookmarks(directory)
+  directory.bookmarks.each do |bookmark|
+    yield bookmark
+  end
+
+  directory.children.each do |subnode|
+    all_bookmarks(subnode) do |bookmark|
+      yield bookmark
+    end
+  end    
+end
+
 print_node(root_node)
+
+# Add bookmark
+root_node.children[2].add_bookmark("Crowdway", "http://crowdway.com/", "Best site in the universe!")
+
+all_bookmarks(root_node) do |bookmark|
+  puts bookmark.title
+
+  if bookmark.title == "Test 1111"
+    puts " --> Changing to 'Oink Oink'"
+    bookmark.title = "Oink Oink"
+  end
+end
+
+
 
 # Go to the first folder
 #page.search('//li[@class="xfolkentry"]//
