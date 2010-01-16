@@ -36,11 +36,49 @@
 require 'rubygems'
 require 'mechanize'
 
-a = WWW::Mechanize.new do |agent|
-  agent.redirect_ok = true
-  agent.follow_meta_refresh = true
-  agent.user_agent = "Opera Chain v0.0"
+class OperaChain
+  attr_reader :username, :password, :root
+  def initialize(username, password)
+    @username = username
+    @password = password
+
+    @agent = WWW::Mechanize.new do |agent|
+      agent.redirect_ok = true
+      agent.follow_meta_refresh = true
+      agent.user_agent = "Opera Chain v0.0"
+    end
+
+    page = @agent.get('http://link.opera.com/')
+    form = page.forms.first
+    form.user = @username
+    form.passwd = @password
+    sleep 3
+    page = @agent.submit form
+
+    raise "login failed" if page.title =~ /Login Failed/i
+
+    sleep 3
+    page = @agent.click page.link_with(:text => 'Bookmarks')
+
+    @root = OperaDirectory.new(@agent, page.search('//ul[@id="folders"]/li').first)      # Root node, "Bookmarks"
+  end
+
+  def bookmarks   # Copy of OperaBookmark.all_bookmarks. Maybe make a link?
+    if block_given?
+      @root.all_bookmarks do |bookmark|
+        yield bookmark
+      end
+    else
+      @root.all_bookmarks
+    end
+  end
+
+  def to_s
+    @root.to_s
+  end
 end
+
+
 
 # BookmarkTag == Directory
 class OperaDirectory
@@ -68,6 +106,27 @@ class OperaDirectory
     @bookmarks
   end
 
+  def all_bookmarks
+    if block_given?
+      @bookmarks.each do |bookmark|
+        yield bookmark
+      end
+
+      directory.children.each do |subnode|
+        all_bookmarks(subnode) do |bookmark|
+          yield bookmark
+        end
+      end    
+    else
+      result = []
+      all_bookmarks do |bookmark|
+        result << bookmark
+      end
+
+      result
+    end
+  end
+
   def add_bookmark(title, link, description = "")
     cache unless @cached
 
@@ -78,6 +137,18 @@ class OperaDirectory
     form.desc = description
     page = form.click_button
     cache(page)
+  end
+
+  def to_s(level = 0)
+    result = "#{'  ' * level}#{@title}\n" 
+    bookmarks.each do |bookmark|
+      result << "#{'  ' * (level)} - #{bookmark.title}\n"
+    end
+    @children.each do |subdir|
+      result << subdir.to_s(level+1)
+    end
+
+    result
   end
 
 
@@ -150,79 +221,17 @@ class OperaBookmark
 end
 
 
-# For prototype only: make html_body public so we can
-# check the output
-class WWW::Mechanize::Page
-  public :html_body
-end
-
-page = a.get('http://link.opera.com/')
-
-form = page.forms.first
-
-puts "Type your username: "
-form.user = gets.strip
-puts "Type your password: "
-form.passwd = gets.strip
-
-sleep 1
-page = a.submit form
-
-if page.title =~ /Login Failed/i
-  puts "Login Failed!"
-  puts page.html_body
-  # Todo: check if we can submit the form here as well
-  exit
-end
-sleep 1
-page = a.click page.link_with(:text => 'Bookmarks')
-
-# The following is deprecated:
-# Get first level bookmarks directories:
-#page.search('//ul[@id="mob-folders"]//a').each do |link|
-#  puts link.content + " -> " + link['href']
-#end
-
-
-root_node = OperaDirectory.new(a, page.search('//ul[@id="folders"]/li').first)      # Root node, "Bookmarks"
-
-
-# Browse through bookmark directories
-def print_node(node, level = 0)
-  puts "#{'  ' * level}#{node.title}" 
-  node.bookmarks.each do |bookmark|
-    puts "#{'  ' * (level+1)}#{bookmark.title}"
-  end
-  node.children.each do |subnode|
-    print_node(subnode, level+1)
-  end
-end
-
-def all_bookmarks(directory)
-  directory.bookmarks.each do |bookmark|
-    yield bookmark
-  end
-
-  directory.children.each do |subnode|
-    all_bookmarks(subnode) do |bookmark|
-      yield bookmark
-    end
-  end    
-end
-
-print_node(root_node)
-
 # Add bookmark
-root_node.children[2].add_bookmark("Crowdway", "http://crowdway.com/", "Best site in the universe!")
+#root_node.children[2].add_bookmark("Crowdway", "http://crowdway.com/", "Best site in the universe!")
 
-all_bookmarks(root_node) do |bookmark|
-  puts bookmark.title
+#all_bookmarks(root_node) do |bookmark|
+#  puts bookmark.title
 
-  if bookmark.title == "Test 1111"
-    puts " --> Changing to 'Oink Oink'"
-    bookmark.title = "Oink Oink"
-  end
-end
+#  if bookmark.title == "Test 1111"
+#    puts " --> Changing to 'Oink Oink'"
+#    bookmark.title = "Oink Oink"
+#  end
+#end
 
 
 
