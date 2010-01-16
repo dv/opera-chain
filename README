@@ -2,3 +2,30 @@ Opera Chain
 ===========
 
 Ruby library to access Opera Link
+
+Example
+=======
+
+Example 1:
+  Connects to Opera Link, and displays a nicely formatted
+  tree of bookmarks.
+  
+  require "OperaChain"
+
+  chain = OperaChain.new("user","pass")
+  puts chain
+
+Example 2:
+  Adds a new bookmark.
+
+  chain.root.add("Github", "http://github.com", "Github: Social Coding")
+
+Example 3:
+  Edit a bookmark.
+
+  chain.root.bookmarks[0].title = "Schmeabay.com"
+
+Example 4:
+  Delete a bookmark.
+
+  chain.root.bookmarks[0].delete
