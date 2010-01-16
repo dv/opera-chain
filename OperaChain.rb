@@ -65,6 +65,10 @@ class OperaDirectory
     end
   end
 
+  def refresh
+    @cached = false
+  end
+
   def bookmarks
     cache unless @cached
 
@@ -73,12 +77,12 @@ class OperaDirectory
 
   def all_bookmarks
     if block_given?
-      @bookmarks.each do |bookmark|
+      bookmarks.each do |bookmark|
         yield bookmark
       end
 
-      directory.children.each do |subnode|
-        all_bookmarks(subnode) do |bookmark|
+      children.each do |subnode|
+        subnode.all_bookmarks do |bookmark|
           yield bookmark
         end
       end    
@@ -100,6 +104,7 @@ class OperaDirectory
     form["name"] = title      # Manual selector because name() is a function
     form.link = link
     form.desc = description
+    sleep 3
     page = form.click_button
     cache(page)
   end
@@ -125,9 +130,16 @@ class OperaDirectory
     @bookmarks.clear 
     page ||= @agent.click @link
 
-    @add_link = page.link_with(:text => "Add a bookmark in this folder")
-    page.search('//li[@class="xfolkentry"]').each do |node|
-      @bookmarks << OperaBookmark.new(@agent, node, self)
+    unless page.search("//img[@src='http://my.opera.com/community/graphics/link/screens.jpg']").empty?
+      # Opera burped and gave us the wrong page. Retry, with throttling.
+      puts "Burp!"
+      sleep 3
+      cache
+    else
+      @add_link = page.link_with(:text => "Add a bookmark in this folder")
+      page.search('//li[@class="xfolkentry"]').each do |node|
+        @bookmarks << OperaBookmark.new(@agent, node, self)
+      end
     end
   end
 
